@@ -13,6 +13,7 @@ data class RecordingItem(
     val id: Long = 0,
     val filePath: String,
     val fileName: String,
+    val phoneNumber: String?,
     val sizeBytes: Long,
     val recordedAt: Long,
     val status: QueueStatus = QueueStatus.PENDING,

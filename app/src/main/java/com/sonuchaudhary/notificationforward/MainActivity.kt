@@ -25,12 +25,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,6 +46,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.NavigationBar
@@ -54,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +73,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.sonuchaudhary.notificationforward.data.NotificationRepository
 import com.sonuchaudhary.notificationforward.data.QueueItem
@@ -180,8 +189,41 @@ private fun MainScreen(settingsStore: SettingsStore) {
         ActivityResultContracts.RequestPermission()
     ) { }
 
+    val grantStorageAccess: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.fromParts("package", context.packageName, null)
+                    )
+                )
+            }.onFailure {
+                context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+        } else {
+            requestLegacyStoragePermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Notification Forward") }) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Notification Forward", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Notifications & call recordings, forwarded live",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            )
+        },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             NavigationBar(
@@ -205,6 +247,9 @@ private fun MainScreen(settingsStore: SettingsStore) {
                     .fillMaxSize()
                     .padding(innerPadding),
                 stats = stats,
+                recordingStats = recordingStats,
+                recordingBackupEnabled = uiRecordingSettings.enabled,
+                onGrantStorageAccess = grantStorageAccess,
                 onRetryAllFailed = {
                     scope.launch {
                         repository.retryAllFailed()
@@ -305,22 +350,7 @@ private fun MainScreen(settingsStore: SettingsStore) {
                     WorkerScheduler.enqueueRecordingScanNow(context)
                     scope.launch { snackbarHostState.showSnackbar("Scanning for new recordings…") }
                 },
-                onGrantAccess = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        runCatching {
-                            context.startActivity(
-                                Intent(
-                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                    Uri.fromParts("package", context.packageName, null)
-                                )
-                            )
-                        }.onFailure {
-                            context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                        }
-                    } else {
-                        requestLegacyStoragePermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
-                    }
-                },
+                onGrantAccess = grantStorageAccess,
                 recordingStats = recordingStats,
                 recordingRecent = recordingRecent,
                 onDeleteRecordingItem = { itemId ->
@@ -356,6 +386,9 @@ private fun MainScreen(settingsStore: SettingsStore) {
 private fun HomeScreen(
     modifier: Modifier,
     stats: QueueStats,
+    recordingStats: RecordingStats,
+    recordingBackupEnabled: Boolean,
+    onGrantStorageAccess: () -> Unit,
     onRetryAllFailed: () -> Unit
 ) {
     val context = LocalContext.current
@@ -366,45 +399,42 @@ private fun HomeScreen(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Service Status", fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Notification Access")
-                        val enabled = isNotificationListenerEnabled(context)
-                        StatusBadge(
-                            text = if (enabled) "Granted" else "Not granted",
-                            success = enabled
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Battery Optimization")
-                        val unrestricted = isBatteryUnrestricted(context)
-                        StatusBadge(
-                            text = if (unrestricted) "No restriction" else "Restricted",
-                            success = unrestricted
-                        )
-                    }
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SectionHeader(icon = Icons.Filled.CheckCircle, title = "Quick Setup")
+                    Text(
+                        "Three switches control everything — turn all three on and you're done.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    PermissionRow(
+                        title = "1. Notification Access",
+                        description = "Lets the app read your incoming notifications so it can forward them.",
+                        granted = isNotificationListenerEnabled(context),
+                        buttonLabel = "Open Access Settings",
                         onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
-                    ) {
-                        Text("Open Access Settings")
-                    }
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    PermissionRow(
+                        title = "2. Battery: No Restriction",
+                        description = "Stops Android from killing the app in the background so nothing gets missed.",
+                        granted = isBatteryUnrestricted(context),
+                        buttonLabel = "Open Battery Settings",
                         onClick = { openBatterySettings(context) }
-                    ) {
-                        Text("Open Battery Settings")
-                    }
-                    Button(
+                    )
+                    PermissionRow(
+                        title = "3. All Files Access",
+                        description = "Needed only for Call Recording Backup, to read recordings your phone already saved.",
+                        granted = isAllFilesAccessGranted(context),
+                        buttonLabel = "Grant Storage Access",
+                        onClick = onGrantStorageAccess
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { WorkerScheduler.enqueueImmediate(context) }
                     ) {
@@ -418,10 +448,11 @@ private fun HomeScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Queue Summary", fontWeight = FontWeight.SemiBold)
+                    SectionHeader(icon = Icons.AutoMirrored.Filled.List, title = "Notification Queue")
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         QueueStatCard(
                             modifier = Modifier.weight(1f),
@@ -468,6 +499,144 @@ private fun HomeScreen(
                 }
             }
         }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        SectionHeader(icon = Icons.Filled.CloudDone, title = "Call Recording Backup")
+                        StatusBadge(
+                            text = if (recordingBackupEnabled) "Enabled" else "Disabled",
+                            success = recordingBackupEnabled
+                        )
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QueueStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Pending",
+                            value = recordingStats.pendingCount.toString(),
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        QueueStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Sent",
+                            value = recordingStats.sentCount.toString(),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        QueueStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Failed",
+                            value = recordingStats.failedCount.toString(),
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        }
+        item { Spacer(modifier = Modifier.height(8.dp)) }
+    }
+}
+
+@Composable
+private fun PasswordOutlinedField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String
+) {
+    var visible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { visible = !visible }) {
+                Icon(
+                    imageVector = if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = if (visible) "Hide" else "Show"
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun PermissionRow(
+    title: String,
+    description: String,
+    granted: Boolean,
+    buttonLabel: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+            StatusBadge(text = if (granted) "Granted" else "Not granted", success = granted)
+        }
+        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!granted) {
+            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+                Text(buttonLabel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(icon: ImageVector, title: String) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun EmptyState(icon: ImageVector, message: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(36.dp)
+        )
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -486,10 +655,11 @@ private fun WebhookScreen(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Webhook Settings", fontWeight = FontWeight.SemiBold)
+                    SectionHeader(icon = Icons.Filled.Link, title = "Webhook Settings")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -528,11 +698,10 @@ private fun WebhookScreen(
                     )
 
                     if (uiSettings.authMode == AuthMode.BEARER) {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
+                        PasswordOutlinedField(
                             value = uiSettings.bearerToken,
                             onValueChange = { onSettingsChange(uiSettings.copy(bearerToken = it)) },
-                            label = { Text("Bearer token") }
+                            label = "Bearer token"
                         )
                     }
 
@@ -589,10 +758,11 @@ private fun FilterScreen(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Filter & Retry", fontWeight = FontWeight.SemiBold)
+                    SectionHeader(icon = Icons.Filled.Tune, title = "Filter & Retry")
 
                     DropdownSelector(
                         label = "Filter mode",
@@ -655,16 +825,20 @@ private fun QueueScreen(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Recent Queue", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    SectionHeader(icon = Icons.AutoMirrored.Filled.List, title = "Recent Queue")
                     Button(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = onClearQueue,
                         enabled = recent.isNotEmpty()
                     ) {
                         Text("Clear All Queue")
+                    }
+                    if (recent.isEmpty()) {
+                        EmptyState(icon = Icons.AutoMirrored.Filled.List, message = "No notifications forwarded yet.")
                     }
                 }
             }
@@ -728,14 +902,16 @@ private fun RecordingScreen(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Call Recording Backup", fontWeight = FontWeight.SemiBold)
+                    SectionHeader(icon = Icons.Filled.CloudDone, title = "Call Recording Backup")
                     Text(
                         "Automatically uploads new call recordings to a Telegram chat as they're recorded. " +
                             "Existing recordings are never touched — only ones made after this is enabled.",
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Row(
@@ -749,24 +925,21 @@ private fun RecordingScreen(
                         )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("All Files Access")
-                        val granted = isAllFilesAccessGranted(context)
-                        StatusBadge(text = if (granted) "Granted" else "Not granted", success = granted)
-                    }
-                    Button(modifier = Modifier.fillMaxWidth(), onClick = onGrantAccess) {
-                        Text("Grant Storage Access")
+                    val storageGranted = isAllFilesAccessGranted(context)
+                    if (!storageGranted) {
+                        PermissionRow(
+                            title = "Storage access required",
+                            description = "Grant All Files Access so the app can read your call recordings. (Also available on the Home tab.)",
+                            granted = storageGranted,
+                            buttonLabel = "Grant Storage Access",
+                            onClick = onGrantAccess
+                        )
                     }
 
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
+                    PasswordOutlinedField(
                         value = uiRecordingSettings.botToken,
                         onValueChange = { onSettingsChange(uiRecordingSettings.copy(botToken = it)) },
-                        label = { Text("Telegram bot token") },
-                        singleLine = true
+                        label = "Telegram bot token"
                     )
 
                     OutlinedTextField(
@@ -799,10 +972,11 @@ private fun RecordingScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Upload Summary", fontWeight = FontWeight.SemiBold)
+                    SectionHeader(icon = Icons.Filled.CloudDone, title = "Upload Summary")
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         QueueStatCard(
                             modifier = Modifier.weight(1f),
@@ -844,6 +1018,9 @@ private fun RecordingScreen(
                     ) {
                         Text("Clear All")
                     }
+                    if (recordingRecent.isEmpty()) {
+                        EmptyState(icon = Icons.Filled.Mic, message = "No recordings backed up yet.")
+                    }
                 }
             }
         }
@@ -858,9 +1035,10 @@ private fun RecordingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(item.fileName, fontWeight = FontWeight.SemiBold)
+                        Text(item.phoneNumber ?: "Unknown number", fontWeight = FontWeight.SemiBold)
                         QueueStatusBadge(status = item.status)
                     }
+                    Text(item.fileName, style = MaterialTheme.typography.bodySmall)
                     Text("${item.sizeBytes / 1024} KB", style = MaterialTheme.typography.bodySmall)
                     Text("Attempt: ${item.attemptCount}", style = MaterialTheme.typography.bodySmall)
                     if (!item.lastError.isNullOrBlank()) {

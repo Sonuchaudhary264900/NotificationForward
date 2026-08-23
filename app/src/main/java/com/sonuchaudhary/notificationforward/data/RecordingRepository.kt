@@ -5,11 +5,18 @@ import android.content.Context
 class RecordingRepository(context: Context) {
     private val dao = AppDatabase.getInstance(context).recordingDao()
 
-    suspend fun enqueueIfNew(filePath: String, fileName: String, sizeBytes: Long, recordedAt: Long): Boolean {
+    suspend fun enqueueIfNew(
+        filePath: String,
+        fileName: String,
+        phoneNumber: String?,
+        sizeBytes: Long,
+        recordedAt: Long
+    ): Boolean {
         val now = System.currentTimeMillis()
         val item = RecordingItem(
             filePath = filePath,
             fileName = fileName,
+            phoneNumber = phoneNumber,
             sizeBytes = sizeBytes,
             recordedAt = recordedAt,
             nextRetryAt = now,

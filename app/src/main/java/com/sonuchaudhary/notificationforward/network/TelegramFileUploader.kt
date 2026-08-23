@@ -16,7 +16,7 @@ data class RecordingUploadResult(
 class TelegramFileUploader {
     private val client = HttpClientProvider.client
 
-    fun sendDocument(botToken: String, chatId: String, file: File): RecordingUploadResult {
+    fun sendDocument(botToken: String, chatId: String, file: File, caption: String? = null): RecordingUploadResult {
         if (!file.exists()) {
             return RecordingUploadResult(success = false, isPermanentFailure = true, message = "File no longer exists")
         }
@@ -29,11 +29,14 @@ class TelegramFileUploader {
         }
 
         return try {
-            val body = MultipartBody.Builder()
+            val bodyBuilder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("chat_id", chatId)
                 .addFormDataPart("document", file.name, file.asRequestBody(guessMediaType(file.extension)))
-                .build()
+            if (!caption.isNullOrBlank()) {
+                bodyBuilder.addFormDataPart("caption", caption.take(1024))
+            }
+            val body = bodyBuilder.build()
 
             val request = Request.Builder()
                 .url("https://api.telegram.org/bot$botToken/sendDocument")

@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [QueueItem::class, RecordingItem::class], version = 2, exportSchema = false)
+@Database(entities = [QueueItem::class, RecordingItem::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun queueDao(): QueueDao
     abstract fun recordingDao(): RecordingDao
