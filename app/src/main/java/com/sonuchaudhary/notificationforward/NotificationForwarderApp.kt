@@ -7,5 +7,6 @@ class NotificationForwarderApp : Application() {
     override fun onCreate() {
         super.onCreate()
         WorkerScheduler.ensurePeriodic(this)
+        WorkerScheduler.ensureRecordingPeriodic(this)
     }
 }

@@ -1,14 +1,19 @@
 package com.sonuchaudhary.notificationforward
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -65,6 +71,9 @@ import com.sonuchaudhary.notificationforward.data.NotificationRepository
 import com.sonuchaudhary.notificationforward.data.QueueItem
 import com.sonuchaudhary.notificationforward.data.QueueStats
 import com.sonuchaudhary.notificationforward.data.QueueStatus
+import com.sonuchaudhary.notificationforward.data.RecordingItem
+import com.sonuchaudhary.notificationforward.data.RecordingRepository
+import com.sonuchaudhary.notificationforward.data.RecordingStats
 import com.sonuchaudhary.notificationforward.network.WebhookClient
 import com.sonuchaudhary.notificationforward.settings.AppSettings
 import com.sonuchaudhary.notificationforward.settings.AuthMode
@@ -80,8 +89,16 @@ private enum class AppTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Filled.Home),
     WEBHOOK("Webhook", Icons.Filled.Link),
     FILTER("Filter", Icons.Filled.Tune),
-    QUEUE("Queue", Icons.AutoMirrored.Filled.List)
+    QUEUE("Queue", Icons.AutoMirrored.Filled.List),
+    RECORDINGS("Recordings", Icons.Filled.Mic)
 }
+
+private data class UiRecordingSettings(
+    val enabled: Boolean,
+    val botToken: String,
+    val chatId: String,
+    val folderPath: String
+)
 
 private data class UiSettings(
     val webhookUrl: String,
@@ -134,15 +151,34 @@ private fun MainScreen(settingsStore: SettingsStore) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember { NotificationRepository(context) }
+    val recordingRepository = remember { RecordingRepository(context) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
     var uiSettings by remember { mutableStateOf(settingsStore.readAll().toUiSettings()) }
+    var uiRecordingSettings by remember {
+        mutableStateOf(
+            UiRecordingSettings(
+                enabled = settingsStore.recordingBackupEnabled,
+                botToken = settingsStore.recordingBotToken,
+                chatId = settingsStore.recordingChatId,
+                folderPath = settingsStore.recordingFolderPath
+            )
+        )
+    }
 
     val stats by repository.observeStats().collectAsState(
         initial = QueueStats(0, 0, 0, 0)
     )
     val recent by repository.observeRecent(30).collectAsState(initial = emptyList())
+    val recordingStats by recordingRepository.observeStats().collectAsState(
+        initial = RecordingStats(0, 0, 0, 0)
+    )
+    val recordingRecent by recordingRepository.observeRecent(30).collectAsState(initial = emptyList())
+
+    val requestLegacyStoragePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Notification Forward") }) },
@@ -250,11 +286,69 @@ private fun MainScreen(settingsStore: SettingsStore) {
                     }
                 }
             )
+
+            AppTab.RECORDINGS -> RecordingScreen(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                uiRecordingSettings = uiRecordingSettings,
+                onSettingsChange = { uiRecordingSettings = it },
+                onSave = {
+                    settingsStore.recordingBackupEnabled = uiRecordingSettings.enabled
+                    settingsStore.recordingBotToken = uiRecordingSettings.botToken
+                    settingsStore.recordingChatId = uiRecordingSettings.chatId
+                    settingsStore.recordingFolderPath = uiRecordingSettings.folderPath
+                    WorkerScheduler.enqueueRecordingScanNow(context)
+                    scope.launch { snackbarHostState.showSnackbar("Recording backup settings saved") }
+                },
+                onScanNow = {
+                    WorkerScheduler.enqueueRecordingScanNow(context)
+                    scope.launch { snackbarHostState.showSnackbar("Scanning for new recordings…") }
+                },
+                onGrantAccess = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.fromParts("package", context.packageName, null)
+                                )
+                            )
+                        }.onFailure {
+                            context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                        }
+                    } else {
+                        requestLegacyStoragePermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                },
+                recordingStats = recordingStats,
+                recordingRecent = recordingRecent,
+                onDeleteRecordingItem = { itemId ->
+                    scope.launch {
+                        recordingRepository.deleteItem(itemId)
+                        snackbarHostState.showSnackbar("Recording item deleted")
+                    }
+                },
+                onClearRecordings = {
+                    scope.launch {
+                        recordingRepository.clearAll()
+                        snackbarHostState.showSnackbar("Recording queue cleared")
+                    }
+                },
+                onRetryAllFailedRecordings = {
+                    scope.launch {
+                        recordingRepository.retryAllFailed()
+                        WorkerScheduler.enqueueRecordingScanNow(context)
+                        snackbarHostState.showSnackbar("All failed recordings re-queued")
+                    }
+                }
+            )
         }
     }
 
     LaunchedEffect(Unit) {
         WorkerScheduler.ensurePeriodic(context)
+        WorkerScheduler.ensureRecordingPeriodic(context)
     }
 }
 
@@ -612,6 +706,183 @@ private fun QueueScreen(
     }
 }
 
+@Composable
+private fun RecordingScreen(
+    modifier: Modifier,
+    uiRecordingSettings: UiRecordingSettings,
+    onSettingsChange: (UiRecordingSettings) -> Unit,
+    onSave: () -> Unit,
+    onScanNow: () -> Unit,
+    onGrantAccess: () -> Unit,
+    recordingStats: RecordingStats,
+    recordingRecent: List<RecordingItem>,
+    onDeleteRecordingItem: (Long) -> Unit,
+    onClearRecordings: () -> Unit,
+    onRetryAllFailedRecordings: () -> Unit
+) {
+    val context = LocalContext.current
+    LazyColumn(
+        modifier = modifier.padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Call Recording Backup", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Automatically uploads new call recordings to a Telegram chat as they're recorded. " +
+                            "Existing recordings are never touched — only ones made after this is enabled.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Enable backup")
+                        Switch(
+                            checked = uiRecordingSettings.enabled,
+                            onCheckedChange = { onSettingsChange(uiRecordingSettings.copy(enabled = it)) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("All Files Access")
+                        val granted = isAllFilesAccessGranted(context)
+                        StatusBadge(text = if (granted) "Granted" else "Not granted", success = granted)
+                    }
+                    Button(modifier = Modifier.fillMaxWidth(), onClick = onGrantAccess) {
+                        Text("Grant Storage Access")
+                    }
+
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = uiRecordingSettings.botToken,
+                        onValueChange = { onSettingsChange(uiRecordingSettings.copy(botToken = it)) },
+                        label = { Text("Telegram bot token") },
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = uiRecordingSettings.chatId,
+                        onValueChange = { onSettingsChange(uiRecordingSettings.copy(chatId = it)) },
+                        label = { Text("Telegram chat ID") },
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = uiRecordingSettings.folderPath,
+                        onValueChange = { onSettingsChange(uiRecordingSettings.copy(folderPath = it)) },
+                        label = { Text("Recording folder path") },
+                        singleLine = true
+                    )
+
+                    Button(modifier = Modifier.fillMaxWidth(), onClick = onSave) {
+                        Text("Save Recording Settings")
+                    }
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onScanNow) {
+                        Text("Scan Now")
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Upload Summary", fontWeight = FontWeight.SemiBold)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QueueStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Pending",
+                            value = recordingStats.pendingCount.toString(),
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        QueueStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Sent",
+                            value = recordingStats.sentCount.toString(),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        QueueStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Failed",
+                            value = recordingStats.failedCount.toString(),
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    if (recordingStats.failedCount > 0) {
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = onRetryAllFailedRecordings,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Retry All Failed (${recordingStats.failedCount})")
+                        }
+                    }
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onClearRecordings,
+                        enabled = recordingRecent.isNotEmpty()
+                    ) {
+                        Text("Clear All")
+                    }
+                }
+            }
+        }
+
+        items(recordingRecent) { item ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(item.fileName, fontWeight = FontWeight.SemiBold)
+                        QueueStatusBadge(status = item.status)
+                    }
+                    Text("${item.sizeBytes / 1024} KB", style = MaterialTheme.typography.bodySmall)
+                    Text("Attempt: ${item.attemptCount}", style = MaterialTheme.typography.bodySmall)
+                    if (!item.lastError.isNullOrBlank()) {
+                        Text(
+                            "Err: ${item.lastError}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onDeleteRecordingItem(item.id) }
+                    ) {
+                        Text("Delete")
+                    }
+                }
+            }
+        }
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DropdownSelector(
@@ -772,4 +1043,13 @@ private fun openBatterySettings(context: Context) {
 private fun isBatteryUnrestricted(context: Context): Boolean {
     val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
     return pm.isIgnoringBatteryOptimizations(context.packageName)
+}
+
+private fun isAllFilesAccessGranted(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        Environment.isExternalStorageManager()
+    } else {
+        context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
 }

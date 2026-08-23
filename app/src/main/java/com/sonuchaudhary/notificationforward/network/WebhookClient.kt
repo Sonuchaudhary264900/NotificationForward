@@ -8,8 +8,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.logging.HttpLoggingInterceptor
-import java.util.concurrent.TimeUnit
 
 data class SendResult(
     val success: Boolean,
@@ -19,15 +17,7 @@ data class SendResult(
 
 class WebhookClient {
     private val gson = Gson()
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        })
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client: OkHttpClient = HttpClientProvider.client
 
     fun send(
         url: String,

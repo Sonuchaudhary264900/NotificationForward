@@ -16,6 +16,7 @@ Based on [ItsAzni/NotificationForwarder](https://github.com/ItsAzni/Notification
 - **Deduplication** — skips duplicate/ongoing/group summary notifications
 - **Background support** — survives app kill and device reboot
 - **Auto start** after reboot (`BOOT_COMPLETED`)
+- **Call recording backup** — automatically uploads newly recorded call recordings to a Telegram chat as they're created
 - **ProGuard** ready — release builds with minification enabled
 
 ## Setup
@@ -97,6 +98,25 @@ Available variables: `{deviceId}`, `{packageName}`, `{appName}`, `{title}`, `{te
 device={deviceId}
 msg={title}
 ```
+
+## Call Recording Backup
+
+The app can watch your phone's call-recording folder and automatically upload each new recording to a Telegram chat via a bot — a simple off-device backup for call recordings, without any cloud storage account.
+
+Only recordings made **after** the feature is enabled are ever uploaded; existing recordings are left untouched.
+
+### Setup
+
+1. Open the app → **Recordings** tab.
+2. Enter your **Telegram bot token** (from [@BotFather](https://t.me/BotFather)) and your **chat ID**.
+3. Set the **recording folder path** — this varies by manufacturer. Common paths:
+   - `/storage/emulated/0/Music/PhoneRecord` (Transsion/HiOS — Tecno, Infinix, itel)
+   - `/storage/emulated/0/Recordings/Call` (many stock/AOSP-based ROMs)
+   - `/storage/emulated/0/MIUI/sound_recorder/call_rec` (MIUI)
+4. Tap **Grant Storage Access** and allow "All files access" for the app (Android 11+) — required because call recordings live outside the app's own storage sandbox and outside the shared media index.
+5. Enable the toggle and save.
+
+New recordings are picked up automatically (checked every 15 minutes, and immediately after saving settings or on boot), or tap **Scan Now** to check immediately. Each file is uploaded via Telegram's `sendDocument` API (50MB max per file, a Bot API limit).
 
 ## Local Webhook Server (`webhook/`)
 

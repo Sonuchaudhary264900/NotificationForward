@@ -74,6 +74,26 @@ class SettingsStore(context: Context) {
         get() = prefs.getInt(KEY_BATCH_SIZE, 20)
         set(value) = prefs.edit { putInt(KEY_BATCH_SIZE, value.coerceIn(1, 100)) }
 
+    var recordingBackupEnabled: Boolean
+        get() = prefs.getBoolean(KEY_RECORDING_ENABLED, false)
+        set(value) = prefs.edit { putBoolean(KEY_RECORDING_ENABLED, value) }
+
+    var recordingBotToken: String
+        get() = prefs.getString(KEY_RECORDING_BOT_TOKEN, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_RECORDING_BOT_TOKEN, value.trim()) }
+
+    var recordingChatId: String
+        get() = prefs.getString(KEY_RECORDING_CHAT_ID, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_RECORDING_CHAT_ID, value.trim()) }
+
+    var recordingFolderPath: String
+        get() = prefs.getString(KEY_RECORDING_FOLDER_PATH, DEFAULT_RECORDING_FOLDER) ?: DEFAULT_RECORDING_FOLDER
+        set(value) = prefs.edit { putString(KEY_RECORDING_FOLDER_PATH, value.trim()) }
+
+    var lastRecordingScanAt: Long
+        get() = prefs.getLong(KEY_LAST_RECORDING_SCAN, 0L)
+        set(value) = prefs.edit { putLong(KEY_LAST_RECORDING_SCAN, value) }
+
     fun readAll(): AppSettings {
         return AppSettings(
             webhookUrl = webhookUrl,
@@ -136,6 +156,12 @@ class SettingsStore(context: Context) {
         private const val KEY_PAYLOAD_TEMPLATE_RAW = "payload_template_raw"
         private const val KEY_MAX_RETRY = "max_retry"
         private const val KEY_BATCH_SIZE = "batch_size"
+        private const val KEY_RECORDING_ENABLED = "recording_backup_enabled"
+        private const val KEY_RECORDING_BOT_TOKEN = "recording_bot_token"
+        private const val KEY_RECORDING_CHAT_ID = "recording_chat_id"
+        private const val KEY_RECORDING_FOLDER_PATH = "recording_folder_path"
+        private const val KEY_LAST_RECORDING_SCAN = "last_recording_scan_at"
+        private const val DEFAULT_RECORDING_FOLDER = "/storage/emulated/0/Music/PhoneRecord"
 
         fun parsePackages(raw: String): Set<String> {
             return raw.split(',', '\n', ';')

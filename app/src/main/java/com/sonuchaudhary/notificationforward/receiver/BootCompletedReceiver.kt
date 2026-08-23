@@ -12,6 +12,8 @@ class BootCompletedReceiver : BroadcastReceiver() {
             Intent.ACTION_LOCKED_BOOT_COMPLETED -> {
                 WorkerScheduler.ensurePeriodic(context)
                 WorkerScheduler.enqueueImmediate(context)
+                WorkerScheduler.ensureRecordingPeriodic(context)
+                WorkerScheduler.enqueueRecordingScanNow(context)
             }
         }
     }
