@@ -88,6 +88,7 @@ import com.sonuchaudhary.notificationforward.settings.AppSettings
 import com.sonuchaudhary.notificationforward.settings.AuthMode
 import com.sonuchaudhary.notificationforward.settings.FilterMode
 import com.sonuchaudhary.notificationforward.settings.SettingsStore
+import com.sonuchaudhary.notificationforward.ui.nav.AppNavHost
 import com.sonuchaudhary.notificationforward.ui.theme.AppTheme
 import com.sonuchaudhary.notificationforward.worker.WorkerScheduler
 import kotlinx.coroutines.Dispatchers
@@ -148,7 +149,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AppTheme {
-                MainScreen(settingsStore = settingsStore)
+                AppNavHost(settingsStore = settingsStore)
             }
         }
     }
@@ -156,7 +157,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainScreen(settingsStore: SettingsStore) {
+internal fun MainScreen(settingsStore: SettingsStore) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember { NotificationRepository(context) }

@@ -23,3 +23,10 @@ Thumbs.db
 webhook/logs/
 webhook/node_modules/
 webhook/.env
+
+# Firebase (family pairing backend)
+app/google-services.json
+firebase/functions/node_modules/
+firebase/functions/lib/
+firebase/.firebase/
+firebase/firebase-debug.log

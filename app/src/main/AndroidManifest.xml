@@ -14,6 +14,10 @@
         android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
+    <!-- Family pairing: QR-code scan is a convenience alternative to manual code entry,
+         requested on-demand when the parent taps "Scan QR", never upfront. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <application
         android:name=".NotificationForwarderApp"
         android:allowBackup="true"
@@ -53,6 +57,23 @@
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".service.FcmMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".monitoring.MonitoringForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Shows a persistent notice on this device whenever a paired parent device is actively viewing location, camera, or screen." />
+        </service>
 
     </application>
 

@@ -4,12 +4,18 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Applied conditionally: the google-services plugin fails the build if google-services.json
+// isn't present yet. Add app/google-services.json from your Firebase project console to enable it.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.sonuchaudhary.notificationforward"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.sonuchaudhary.notificationforward"
+        applicationId = "com.gigamind.XSPY"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -29,7 +35,10 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
+            // No applicationIdSuffix: google-services.json only registers the base package
+            // (com.gigamind.XSPY) with Firebase. Debug and release now share that package name,
+            // so they can't be installed side-by-side on one device — add a second Firebase
+            // Android app for a ".debug" package later if that separation becomes necessary.
         }
     }
 
@@ -82,4 +91,27 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.google.code.gson:gson:2.11.0")
+
+    // Family pairing backend (Firestore + Cloud Functions + Cloud Messaging)
+    // Pinned below the latest BOM: newer firebase-bom releases ship Kotlin-2.x-compiled
+    // artifacts, incompatible with this project's Kotlin 1.9.24 / Compose compiler 1.5.14.
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-functions")
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.android.gms:play-services-base:18.5.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    // Encrypted credential/pairing-secret storage (replaces plaintext SharedPreferences)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Onboarding/pairing flow navigation + view-model state
+    implementation("androidx.navigation:navigation-compose:2.8.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5")
+
+    // QR code generation (child) and scanning (parent) for the pairing flow
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.3")
 }

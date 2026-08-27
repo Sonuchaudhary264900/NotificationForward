@@ -3,6 +3,7 @@ package com.sonuchaudhary.notificationforward.settings
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.sonuchaudhary.notificationforward.security.SecurePrefsMigrator
 
 enum class FilterMode { ALL_APPS, WHITELIST, BLACKLIST }
 enum class AuthMode { NONE, BEARER, CUSTOM }
@@ -23,8 +24,7 @@ data class AppSettings(
 )
 
 class SettingsStore(context: Context) {
-    private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences("notif_settings", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = SecurePrefsMigrator.securePrefs(context)
 
     var webhookUrl: String
         get() = prefs.getString(KEY_WEBHOOK_URL, "") ?: ""

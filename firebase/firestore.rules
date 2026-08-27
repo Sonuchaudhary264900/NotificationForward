@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isMember(familyId) {
+      return request.auth != null &&
+        request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.members;
+    }
+
+    match /families/{familyId} {
+      allow read: if isMember(familyId);
+      // Family creation and membership changes only happen inside the createPairingCode /
+      // consumePairingCode Cloud Functions (Admin SDK bypasses rules), never directly from a client.
+      allow write: if false;
+
+      match /devices/{deviceId} {
+        allow read: if isMember(familyId);
+        allow create: if false;
+        // Members may update only their own heartbeat/token/consent fields on an existing device
+        // doc — never create a new one (that's the pairing functions' job) or touch another
+        // device's doc.
+        allow update: if isMember(familyId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['lastSeenAt', 'fcmToken', 'consentAcknowledgedAt']);
+        allow delete: if false;
+      }
+
+      match /commands/{commandId} {
+        allow read: if isMember(familyId);
+        // Phase 4 groundwork: a member may issue a command; only status/ackedAt may be updated
+        // afterwards (by the target device acking it).
+        allow create: if isMember(familyId) && request.resource.data.issuedByDeviceId is string;
+        allow update: if isMember(familyId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'ackedAt']);
+        allow delete: if false;
+      }
+    }
+
+    match /pairingCodes/{code} {
+      // Cloud Functions only — the Admin SDK bypasses rules entirely, so this just blocks any
+      // direct client read/write of pending pairing codes.
+      allow read, write: if false;
+    }
+  }
+}

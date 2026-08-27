@@ -14,6 +14,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 WorkerScheduler.enqueueImmediate(context)
                 WorkerScheduler.ensureRecordingPeriodic(context)
                 WorkerScheduler.enqueueRecordingScanNow(context)
+                WorkerScheduler.ensureCommandPollPeriodic(context)
+                WorkerScheduler.enqueueCommandPollNow(context)
+                WorkerScheduler.enqueueFcmTokenSync(context)
             }
         }
     }
