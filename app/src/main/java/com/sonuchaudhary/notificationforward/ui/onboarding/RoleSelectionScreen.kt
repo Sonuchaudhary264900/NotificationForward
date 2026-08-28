@@ -6,17 +6,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.sonuchaudhary.notificationforward.settings.DeviceRole
 
 @Composable
-fun RoleSelectionScreen(onRoleSelected: (DeviceRole) -> Unit) {
+fun RoleSelectionScreen(onRoleSelected: (DeviceRole) -> Unit, onSkip: () -> Unit) {
     Scaffold { innerPadding ->
         Column(
             modifier = Modifier
@@ -62,6 +64,20 @@ fun RoleSelectionScreen(onRoleSelected: (DeviceRole) -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Skip — just use this device on its own")
+            }
+            Text(
+                "No family pairing. Notification forwarding and call recording backup work the same either way.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

@@ -55,20 +55,27 @@ export const createPairingCode = onCall(async (request) => {
     });
   }
 
-  await db
-    .collection("families").doc(familyId)
-    .collection("devices").doc(childDeviceId)
-    .set(
-      {
-        role: "CHILD",
-        displayName,
-        platform: "android",
-        pairedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
-        status: "PENDING",
-      },
-      { merge: true }
-    );
+  const deviceRef = db.collection("families").doc(familyId).collection("devices").doc(childDeviceId);
+  const existingDeviceSnap = await deviceRef.get();
+  const alreadyActive = existingDeviceSnap.exists && existingDeviceSnap.data()?.status === "ACTIVE";
+
+  await deviceRef.set(
+    {
+      role: "CHILD",
+      displayName,
+      platform: "android",
+      lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+      // Never clobber an already-paired child back to PENDING: this function re-runs any time the
+      // child app reopens on the pairing-code screen before its own local state has caught up with
+      // a parent who already redeemed a code server-side (see PairingViewModel.generateChildCode).
+      ...(alreadyActive ? {} : { pairedAt: admin.firestore.FieldValue.serverTimestamp(), status: "PENDING" }),
+    },
+    { merge: true }
+  );
+
+  if (alreadyActive) {
+    return { code: "", familyId, expiresAt: 0, alreadyPaired: true };
+  }
 
   let code = "";
   for (let attempt = 0; attempt < 5; attempt++) {

@@ -17,6 +17,7 @@ object WorkerScheduler {
     private const val RECORDING_SYNC_WORK = "recording_sync_work"
     private const val RECORDING_PERIODIC_WORK = "recording_periodic_work"
     private const val FCM_TOKEN_SYNC_WORK = "fcm_token_sync_work"
+    private const val FCM_TOKEN_SYNC_PERIODIC_WORK = "fcm_token_sync_periodic_work"
     private const val COMMAND_POLL_WORK = "command_poll_work"
     private const val COMMAND_POLL_PERIODIC_WORK = "command_poll_periodic_work"
 
@@ -84,6 +85,18 @@ object WorkerScheduler {
             FCM_TOKEN_SYNC_WORK,
             ExistingWorkPolicy.KEEP,
             request
+        )
+    }
+
+    fun ensureFcmTokenSyncPeriodic(context: Context) {
+        val periodic = PeriodicWorkRequestBuilder<FcmTokenSyncWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(networkConstraints)
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            FCM_TOKEN_SYNC_PERIODIC_WORK,
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodic
         )
     }
 

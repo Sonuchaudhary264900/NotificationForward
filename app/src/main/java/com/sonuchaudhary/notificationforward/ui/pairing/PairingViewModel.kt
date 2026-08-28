@@ -39,18 +39,29 @@ class PairingViewModel(
     private val _state = MutableStateFlow(PairingUiState())
     val state: StateFlow<PairingUiState> = _state.asStateFlow()
 
-    /** Child device only. Must be called before generateChildCode() — enforced by nav graph order. */
-    fun acceptConsent() {
-        roleStore.consentAcceptedAt = System.currentTimeMillis()
-    }
-
     fun generateChildCode() {
         if (_state.value.loading || _state.value.code != null) return
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
             try {
+                // Reopening this screen before the local pairingStatus caught up with an ACTIVE
+                // family (e.g. app was killed right after a parent redeemed the code) must not
+                // re-request a fresh code — that would ask the backend to reset an already-paired
+                // child back to PENDING. Short-circuit into the paired state instead.
+                val existingFamilyId = roleStore.familyId
+                if (existingFamilyId != null && fetchDeviceStatus(existingFamilyId) == "ACTIVE") {
+                    applyStatus("ACTIVE")
+                    _state.value = _state.value.copy(loading = false)
+                    return@launch
+                }
+
                 val result = pairingRepository.createPairingCode(roleStore.deviceId, roleStore.displayName)
                 roleStore.familyId = result.familyId
+                if (result.alreadyPaired) {
+                    applyStatus("ACTIVE")
+                    _state.value = _state.value.copy(loading = false)
+                    return@launch
+                }
                 familyRepository.recordConsent(result.familyId, roleStore.deviceId)
                 _state.value = _state.value.copy(loading = false, code = result.code)
                 observeStatus(result.familyId)
@@ -58,6 +69,14 @@ class PairingViewModel(
                 _state.value = _state.value.copy(loading = false, error = e.message ?: "Failed to create pairing code")
             }
         }
+    }
+
+    private suspend fun fetchDeviceStatus(familyId: String): String? {
+        return runCatching {
+            FirebaseModule.firestore.collection("families").document(familyId)
+                .collection("devices").document(roleStore.deviceId).get().await()
+                .getString("status")
+        }.getOrNull()
     }
 
     private fun observeStatus(familyId: String) {

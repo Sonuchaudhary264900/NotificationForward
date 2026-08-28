@@ -7,7 +7,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
-data class PairingCodeResult(val code: String, val familyId: String, val expiresAt: Long)
+data class PairingCodeResult(
+    val code: String,
+    val familyId: String,
+    val expiresAt: Long,
+    val alreadyPaired: Boolean = false
+)
 
 /**
  * Wraps the createPairingCode/consumePairingCode Cloud Functions (see firebase/functions/src/index.ts)
@@ -31,10 +36,12 @@ class PairingRepository {
         )
         val result = functions.getHttpsCallable("createPairingCode").call(payload).await()
         val data = result.data as? Map<*, *> ?: error("Unexpected response from createPairingCode")
+        val alreadyPaired = data["alreadyPaired"] as? Boolean ?: false
         return PairingCodeResult(
-            code = data["code"] as? String ?: error("Missing code in createPairingCode response"),
+            code = data["code"] as? String ?: if (alreadyPaired) "" else error("Missing code in createPairingCode response"),
             familyId = data["familyId"] as? String ?: error("Missing familyId in createPairingCode response"),
-            expiresAt = (data["expiresAt"] as? Number)?.toLong() ?: 0L
+            expiresAt = (data["expiresAt"] as? Number)?.toLong() ?: 0L,
+            alreadyPaired = alreadyPaired
         )
     }
 

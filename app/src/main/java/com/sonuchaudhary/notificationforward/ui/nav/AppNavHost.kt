@@ -1,7 +1,9 @@
 package com.sonuchaudhary.notificationforward.ui.nav
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -9,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.sonuchaudhary.notificationforward.MainScreen
+import com.sonuchaudhary.notificationforward.data.FamilyRepository
 import com.sonuchaudhary.notificationforward.settings.DeviceRole
 import com.sonuchaudhary.notificationforward.settings.RoleStore
 import com.sonuchaudhary.notificationforward.settings.SettingsStore
@@ -31,7 +34,7 @@ fun AppNavHost(settingsStore: SettingsStore) {
 
     val startRoute = remember {
         when {
-            roleStore.isPaired -> Destination.Main.route
+            roleStore.isPaired || roleStore.pairingSkipped -> Destination.Main.route
             roleStore.role == DeviceRole.CHILD && !roleStore.hasConsented -> Destination.Consent.route
             roleStore.role == DeviceRole.CHILD -> Destination.PairingCode.route
             roleStore.role == DeviceRole.PARENT -> Destination.PairingEntry.route
@@ -46,6 +49,12 @@ fun AppNavHost(settingsStore: SettingsStore) {
                     roleStore.role = role
                     val next = if (role == DeviceRole.CHILD) Destination.Consent.route else Destination.PairingEntry.route
                     navController.navigate(next) {
+                        popUpTo(Destination.RoleSelection.route) { inclusive = true }
+                    }
+                },
+                onSkip = {
+                    roleStore.pairingSkipped = true
+                    navController.navigate(Destination.Main.route) {
                         popUpTo(Destination.RoleSelection.route) { inclusive = true }
                     }
                 }
@@ -92,6 +101,15 @@ fun AppNavHost(settingsStore: SettingsStore) {
         }
 
         composable(Destination.Main.route) {
+            val familyId = roleStore.familyId
+            if (roleStore.isPaired && familyId != null) {
+                val syncScope = rememberCoroutineScope()
+                DisposableEffect(familyId) {
+                    val familyRepository = FamilyRepository(context)
+                    familyRepository.startSyncingDevices(familyId, syncScope)
+                    onDispose { familyRepository.stopSyncingDevices() }
+                }
+            }
             MainScreen(settingsStore = settingsStore)
         }
     }

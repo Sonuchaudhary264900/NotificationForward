@@ -50,6 +50,11 @@ class RoleStore(context: Context) {
         get() = prefs.getString(KEY_DISPLAY_NAME, android.os.Build.MODEL ?: "Device") ?: "Device"
         set(value) = prefs.edit { putString(KEY_DISPLAY_NAME, value.trim()) }
 
+    /** Set when the user chooses "Skip" on role selection — lets standalone use bypass pairing forever. */
+    var pairingSkipped: Boolean
+        get() = prefs.getBoolean(KEY_PAIRING_SKIPPED, false)
+        set(value) = prefs.edit { putBoolean(KEY_PAIRING_SKIPPED, value) }
+
     val isPaired: Boolean
         get() = role != DeviceRole.NONE && familyId != null && pairingStatus == "ACTIVE"
 
@@ -62,6 +67,7 @@ class RoleStore(context: Context) {
             remove(KEY_FAMILY_ID)
             remove(KEY_PAIRING_STATUS)
             remove(KEY_CONSENT_ACCEPTED_AT)
+            remove(KEY_PAIRING_SKIPPED)
             // deviceId and lastFcmToken intentionally preserved across a re-pair.
         }
     }
@@ -74,5 +80,6 @@ class RoleStore(context: Context) {
         private const val KEY_CONSENT_ACCEPTED_AT = "role_consent_accepted_at"
         private const val KEY_LAST_FCM_TOKEN = "role_last_fcm_token"
         private const val KEY_DISPLAY_NAME = "role_display_name"
+        private const val KEY_PAIRING_SKIPPED = "role_pairing_skipped"
     }
 }

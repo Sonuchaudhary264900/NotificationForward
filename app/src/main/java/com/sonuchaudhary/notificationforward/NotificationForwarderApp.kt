@@ -12,5 +12,6 @@ class NotificationForwarderApp : Application() {
         WorkerScheduler.ensurePeriodic(this)
         WorkerScheduler.ensureRecordingPeriodic(this)
         WorkerScheduler.ensureCommandPollPeriodic(this)
+        WorkerScheduler.ensureFcmTokenSyncPeriodic(this)
     }
 }

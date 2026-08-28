@@ -21,16 +21,17 @@ class MonitoringForegroundService : Service() {
             ?.toSet()
             .orEmpty()
 
-        if (features.isEmpty()) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
+        // A service launched via startForegroundService() must call startForeground() regardless
+        // of what follows, or the system throws ForegroundServiceDidNotStartInTimeException.
         startForeground(
             MonitoringNotificationManager.NOTIFICATION_ID,
             MonitoringNotificationManager.buildNotification(this, features)
         )
+
+        if (features.isEmpty()) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
         return START_NOT_STICKY
     }
 
