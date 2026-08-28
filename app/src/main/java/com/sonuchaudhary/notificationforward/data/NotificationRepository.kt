@@ -1,7 +1,6 @@
 package com.sonuchaudhary.notificationforward.data
 
 import android.content.Context
-import com.sonuchaudhary.notificationforward.settings.FilterMode
 import com.sonuchaudhary.notificationforward.settings.SettingsStore
 
 class NotificationRepository(private val context: Context) {
@@ -17,10 +16,6 @@ class NotificationRepository(private val context: Context) {
         notificationKey: String
     ) {
         if (!settingsStore.forwardingEnabled) {
-            return
-        }
-
-        if (!allowPackage(packageName)) {
             return
         }
 
@@ -90,14 +85,5 @@ class NotificationRepository(private val context: Context) {
         val exponential = base * (1L shl (attemptCount.coerceAtMost(6)))
         val jitter = (0..4_000).random().toLong()
         return exponential + jitter
-    }
-
-    private fun allowPackage(packageName: String): Boolean {
-        val list = settingsStore.filterPackages
-        return when (settingsStore.filterMode) {
-            FilterMode.ALL_APPS -> true
-            FilterMode.WHITELIST -> list.contains(packageName)
-            FilterMode.BLACKLIST -> !list.contains(packageName)
-        }
     }
 }

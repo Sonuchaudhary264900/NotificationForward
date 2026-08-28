@@ -10,8 +10,8 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.sonuchaudhary.notificationforward.MainScreen
 import com.sonuchaudhary.notificationforward.data.FamilyRepository
+import com.sonuchaudhary.notificationforward.ui.MainScreen
 import com.sonuchaudhary.notificationforward.firebase.FirebaseModule
 import com.sonuchaudhary.notificationforward.settings.DeviceRole
 import com.sonuchaudhary.notificationforward.settings.RoleStore
