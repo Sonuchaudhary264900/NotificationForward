@@ -1,7 +1,9 @@
 package com.sonuchaudhary.notificationforward.ui.pairing
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,20 +21,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import com.sonuchaudhary.notificationforward.ui.common.BackButton
 
 @Composable
 fun PairingEntryScreen(
     viewModel: PairingViewModel,
-    onPaired: () -> Unit
+    onPaired: () -> Unit,
+    onBack: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
     var codeInput by remember { mutableStateOf("") }
 
+    BackHandler(onBack = onBack)
     LaunchedEffect(state.paired) { if (state.paired) onPaired() }
 
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
@@ -43,6 +49,8 @@ fun PairingEntryScreen(
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+    BackButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart))
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -108,5 +116,6 @@ fun PairingEntryScreen(
         ) {
             Text("Scan QR instead")
         }
+    }
     }
 }

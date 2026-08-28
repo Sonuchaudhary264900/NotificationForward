@@ -12,6 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.sonuchaudhary.notificationforward.MainScreen
 import com.sonuchaudhary.notificationforward.data.FamilyRepository
+import com.sonuchaudhary.notificationforward.firebase.FirebaseModule
 import com.sonuchaudhary.notificationforward.settings.DeviceRole
 import com.sonuchaudhary.notificationforward.settings.RoleStore
 import com.sonuchaudhary.notificationforward.settings.SettingsStore
@@ -20,6 +21,7 @@ import com.sonuchaudhary.notificationforward.ui.pairing.ConsentScreen
 import com.sonuchaudhary.notificationforward.ui.pairing.PairingCodeScreen
 import com.sonuchaudhary.notificationforward.ui.pairing.PairingEntryScreen
 import com.sonuchaudhary.notificationforward.ui.pairing.PairingViewModel
+import com.sonuchaudhary.notificationforward.ui.pairing.ParentSignInScreen
 
 /**
  * Flow-control navigation only (Onboarding graph vs. Main graph). The existing bottom-tab
@@ -33,12 +35,21 @@ fun AppNavHost(settingsStore: SettingsStore) {
     val navController = rememberNavController()
 
     val startRoute = remember {
+        val parentSignedIn = FirebaseModule.auth.currentUser?.isAnonymous == false
         when {
             roleStore.isPaired || roleStore.pairingSkipped -> Destination.Main.route
             roleStore.role == DeviceRole.CHILD && !roleStore.hasConsented -> Destination.Consent.route
             roleStore.role == DeviceRole.CHILD -> Destination.PairingCode.route
+            roleStore.role == DeviceRole.PARENT && !parentSignedIn -> Destination.ParentSignIn.route
             roleStore.role == DeviceRole.PARENT -> Destination.PairingEntry.route
             else -> Destination.RoleSelection.route
+        }
+    }
+
+    val resetToRoleSelection: () -> Unit = {
+        roleStore.reset()
+        navController.navigate(Destination.RoleSelection.route) {
+            popUpTo(0) { inclusive = true }
         }
     }
 
@@ -47,7 +58,11 @@ fun AppNavHost(settingsStore: SettingsStore) {
             RoleSelectionScreen(
                 onRoleSelected = { role ->
                     roleStore.role = role
-                    val next = if (role == DeviceRole.CHILD) Destination.Consent.route else Destination.PairingEntry.route
+                    val next = when (role) {
+                        DeviceRole.CHILD -> Destination.Consent.route
+                        DeviceRole.PARENT -> Destination.ParentSignIn.route
+                        DeviceRole.NONE -> Destination.RoleSelection.route
+                    }
                     navController.navigate(next) {
                         popUpTo(Destination.RoleSelection.route) { inclusive = true }
                     }
@@ -68,7 +83,19 @@ fun AppNavHost(settingsStore: SettingsStore) {
                     navController.navigate(Destination.PairingCode.route) {
                         popUpTo(Destination.Consent.route) { inclusive = true }
                     }
-                }
+                },
+                onBack = resetToRoleSelection
+            )
+        }
+
+        composable(Destination.ParentSignIn.route) {
+            ParentSignInScreen(
+                onSignedIn = {
+                    navController.navigate(Destination.PairingEntry.route) {
+                        popUpTo(Destination.ParentSignIn.route) { inclusive = true }
+                    }
+                },
+                onBack = resetToRoleSelection
             )
         }
 
@@ -82,7 +109,8 @@ fun AppNavHost(settingsStore: SettingsStore) {
                             inclusive = true
                         }
                     }
-                }
+                },
+                onBack = resetToRoleSelection
             )
         }
 
@@ -96,7 +124,8 @@ fun AppNavHost(settingsStore: SettingsStore) {
                             inclusive = true
                         }
                     }
-                }
+                },
+                onBack = resetToRoleSelection
             )
         }
 

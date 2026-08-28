@@ -79,6 +79,11 @@ class PairingViewModel(
         }.getOrNull()
     }
 
+    fun retryChildCode() {
+        _state.value = _state.value.copy(error = null)
+        generateChildCode()
+    }
+
     private fun observeStatus(familyId: String) {
         viewModelScope.launch {
             pairingRepository.observeDeviceStatus(familyId, roleStore.deviceId).collect { status ->
@@ -119,7 +124,10 @@ class PairingViewModel(
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
             try {
-                val familyId = pairingRepository.consumePairingCode(code, roleStore.deviceId, roleStore.displayName)
+                val parentDisplayName = FirebaseModule.auth.currentUser
+                    ?.let { it.displayName ?: it.email }
+                    ?: roleStore.displayName
+                val familyId = pairingRepository.consumePairingCode(code, roleStore.deviceId, parentDisplayName)
                 roleStore.role = DeviceRole.PARENT
                 roleStore.familyId = familyId
                 roleStore.pairingStatus = "ACTIVE"
